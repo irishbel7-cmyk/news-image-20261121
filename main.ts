@@ -1,60 +1,65 @@
-/*
- * news-image-20261121 entry point: ships one committed PNG.
+#!/usr/bin/env node
+/**
+ * Entry for news-image-20261121.
  *
- * The grader runs `node /bot/main.ts` in a read-only container with no network
- * and an empty writable output directory (MAKEFUN_OUTPUT_DIR, default /output).
- * The whole entry is a committed PNG, so the program only has to place that PNG
- * at $MAKEFUN_OUTPUT_DIR/entry.png and prove it is a valid, contest-legal
- * image before it exits successfully.
+ * The graded artifact is the committed PNG `entry.png`: one front page for
+ * Saturday 21 November 2026. That artwork was drawn by the agent from the
+ * day's reporting, so this script only has to publish it safely: read the
+ * committed file, refuse anything the competition would refuse, then write
+ * the same bytes into the output directory the grader hands us.
  */
-const fs = require("node:fs");
-const path = require("node:path");
+"use strict";
 
-const repoDir = process.env.MAKEFUN_BOT_DIR || "/bot"; // grader mounts the repo here
-const outDir = process.env.MAKEFUN_OUTPUT_DIR || "/output";
-const sourcePath = path.join(repoDir, "entry.png"); // committed artwork
-const targetPath = path.join(outDir, "entry.png"); // graded artifact
+const { readFileSync, mkdirSync, writeFileSync, statSync } = require("node:fs");
+const { join } = require("node:path");
 
-function fail(message) {
-  process.stderr.write("entry failed: " + message + "\n");
+const LIMIT_BYTES = 1024 * 1024;
+const LIMIT_SIDE = 1024;
+const PNG_MAGIC = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+
+function bail(reason) {
+  process.stderr.write(`news-image entry: ${reason}\n`);
   process.exit(1);
 }
 
-function readPngHeader(file) {
-  const fd = fs.openSync(file, "r");
-  const header = Buffer.alloc(24);
-  const read = fs.readSync(fd, header, 0, 24, 0);
-  fs.closeSync(fd);
-  if (read < 24) fail("entry.png is shorter than a PNG header");
-  const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-  if (!header.subarray(0, 8).equals(signature)) {
-    fail("entry.png does not start with the PNG signature");
+function publish() {
+  const botDir = process.env.MAKEFUN_BOT_DIR || "/bot"; // where the grader mounts the repo
+  const outDir = process.env.MAKEFUN_OUTPUT_DIR || "/output";
+  const artPath = join(botDir, "entry.png");
+
+  let art;
+  try {
+    art = readFileSync(artPath);
+  } catch (err) {
+    bail(`cannot read the committed artwork at ${artPath}: ${err.message}`);
   }
-  return { width: header.readUInt32BE(16), height: header.readUInt32BE(20) };
+
+  if (art.length < 33 || !art.subarray(0, 8).equals(PNG_MAGIC)) {
+    bail("entry.png is not a PNG (bad signature or truncated header)");
+  }
+  if (art.length > LIMIT_BYTES) {
+    bail(`entry.png is ${art.length} bytes, over the ${LIMIT_BYTES} byte cap`);
+  }
+
+  const width = art.readUInt32BE(16);
+  const height = art.readUInt32BE(20);
+  const square = width === height;
+  if (!square || width < 64 || width > LIMIT_SIDE) {
+    bail(`entry.png is ${width}x${height}; expected a square up to ${LIMIT_SIDE}px`);
+  }
+
+  const outPath = join(outDir, "entry.png");
+  mkdirSync(outDir, { recursive: true });
+  writeFileSync(outPath, art);
+
+  const landed = statSync(outPath).size;
+  if (landed !== art.length) {
+    bail(`published ${landed} bytes but the artwork is ${art.length}`);
+  }
+
+  process.stdout.write(
+    `published ${outPath}: ${width}x${height}, ${landed} bytes\n`,
+  );
 }
 
-if (!fs.existsSync(sourcePath)) fail("no entry.png in the repository at " + sourcePath);
-
-// The competition cap is 1 MiB; keep it explicit and overridable for local tests.
-const DEFAULT_MAX_BYTES = 1024 * 1024;
-const MAX_BYTES = Number(process.env.ENTRY_MAX_BYTES || DEFAULT_MAX_BYTES);
-
-const size = fs.statSync(sourcePath).size;
-if (size > MAX_BYTES) fail("entry.png is " + size + " bytes, over the " + MAX_BYTES + " byte cap");
-
-const { width, height } = readPngHeader(sourcePath);
-if (width < 1 || height < 1 || width > 1024 || height > 1024) {
-  fail("entry.png is " + width + "x" + height + ", outside the 1024x1024 limit");
-}
-
-fs.mkdirSync(outDir, { recursive: true }); // tolerate a missing output dir
-fs.copyFileSync(sourcePath, targetPath); // byte-for-byte ship of the committed artwork
-
-// Guard against a silent partial copy: the written file must match byte for byte.
-const written = fs.statSync(targetPath).size;
-if (written !== size) fail("copied entry.png is " + written + " bytes, expected " + size);
-
-process.stdout.write(
-  "wrote " + targetPath + " (" + width + "x" + height + ", " + written +
-  " bytes, cap " + MAX_BYTES + ")\n",
-);
+publish();
