@@ -47,8 +47,8 @@ if (width < 1 || height < 1 || width > 1024 || height > 1024) {
   fail("entry.png is " + width + "x" + height + ", outside the 1024x1024 limit");
 }
 
-fs.mkdirSync(outDir, { recursive: true });
-fs.copyFileSync(sourcePath, targetPath);
+fs.mkdirSync(outDir, { recursive: true }); // tolerate a missing output dir
+fs.copyFileSync(sourcePath, targetPath); // byte-for-byte ship of the committed artwork
 
 // Guard against a silent partial copy: the written file must match byte for byte.
 const written = fs.statSync(targetPath).size;
