@@ -1,5 +1,5 @@
 /*
- * news-image-20261120 entry point.
+ * news-image-20261121 entry point: ships one committed PNG.
  *
  * The grader runs `node /bot/main.ts` in a read-only container with no network
  * and an empty writable output directory (MAKEFUN_OUTPUT_DIR, default /output).
