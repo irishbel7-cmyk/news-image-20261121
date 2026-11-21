@@ -10,10 +10,10 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-const repoDir = process.env.MAKEFUN_BOT_DIR || "/bot";
+const repoDir = process.env.MAKEFUN_BOT_DIR || "/bot"; // grader mounts the repo here
 const outDir = process.env.MAKEFUN_OUTPUT_DIR || "/output";
-const sourcePath = path.join(repoDir, "entry.png");
-const targetPath = path.join(outDir, "entry.png");
+const sourcePath = path.join(repoDir, "entry.png"); // committed artwork
+const targetPath = path.join(outDir, "entry.png"); // graded artifact
 
 function fail(message) {
   process.stderr.write("entry failed: " + message + "\n");
